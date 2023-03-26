@@ -10,12 +10,6 @@ class JSONformatExceprion(Exception):
     pass
 
 
-class NotSendMessageException(Exception):
-    """Отправка сообщеней в телеграмм бот недоступна."""
-
-    pass
-
-
 class TokensNotAvailableException(Exception):
     """Отправка сообщеней в телеграмм бот недоступна."""
 

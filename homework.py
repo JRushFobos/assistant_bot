@@ -15,7 +15,6 @@ from dotenv import load_dotenv
 from exceptions import (
     JSONformatExceprion,
     NetworkException,
-    NotSendMessageException,
     TokensNotAvailableException,
 )
 
