@@ -37,7 +37,6 @@ HOMEWORK_VERDICTS = {
 
 logging.basicConfig(
     level=logging.DEBUG,
-    # filename='logs.log',
     stream=sys.stdout,
     encoding="UTF-8",
     filemode='a',
