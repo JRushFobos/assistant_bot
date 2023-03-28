@@ -1,21 +1,19 @@
-# 1. Исправить ошибки
-# 2. Доделать логирование и эксепшены +
-# 3. Добавить аннотацию типов +
-
-import os
 import logging
-import requests
-import telegram
+import os
 import time
 import sys
 from http import HTTPStatus
+from json import JSONDecodeError
+from logging import StreamHandler
 
+import requests
+import telegram
 from dotenv import load_dotenv
 
 from exceptions import (
     JSONformatExceprion,
-    NetworkException,
-    TokensNotAvailableException,
+    APINotAvailableException,
+    APINotStatusCode200,
 )
 
 load_dotenv()
@@ -35,22 +33,28 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.',
 }
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    stream=sys.stdout,
-    encoding="UTF-8",
-    filemode='a',
-    format='%(asctime)s, %(levelname)s, %(message)s, %(name)s',
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+handler = StreamHandler(stream=sys.stdout)
+formatter = logging.Formatter(
+    '%(asctime)s - '
+    '%(name)s - '
+    '%(levelname)s - '
+    '%(funcName)s - '
+    '%(lineno)d - '
+    '%(message)s '
 )
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 
 def check_tokens() -> bool:
     """Проверяем наличия данных в переменных в окружении."""
-    if not PRACTICUM_TOKEN or not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        logging.critical('Отсутствуют переменные или токены')
-        raise TokensNotAvailableException(
-            'Токены или данные в переменных не доступны'
-        )
+    tokens = ['PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID']
+    empty_tokens = [token for token in tokens if not globals().get(token)]
+    if empty_tokens:
+        logging.critical('Отсутствуют переменные или токены {empty_tokens}')
+        sys.exit(1)
 
 
 def get_api_answer(timestamp: int) -> str:
@@ -59,35 +63,34 @@ def get_api_answer(timestamp: int) -> str:
         response = requests.get(
             ENDPOINT, headers=HEADERS, params={'from_date': timestamp}
         )
-    except Exception as error:
-        raise NetworkException(f'Эндпоинт не доступен. Ошибка {error}')
-    if response.status_code != HTTPStatus.OK:
-        raise requests.HTTPError('Статус код НЕ 200 ОК')
-    try:
-        response = response.json()
-    except Exception:
+        data = response.json()
+    except requests.RequestException as error:
+        raise APINotAvailableException(f'Эндпоинт не доступен. Ошибка {error}')
+    except JSONDecodeError:
         raise JSONformatExceprion('Не корректный формат JSON')
-    return response
+    if response.status_code != HTTPStatus.OK:
+        raise APINotStatusCode200('Статус код НЕ 200 ОК')
+    return data
 
 
 def check_response(response: dict) -> bool:
     """Проверка наличия данных в JSON."""
     if not isinstance(response, dict):
         raise TypeError('Ответ не содержит словарь')
-    elif not isinstance(response.get('homeworks'), list):
+    if not isinstance(response.get('homeworks'), list):
         raise TypeError('Ответ не содержит списка homeworks')
-    elif not response.get('current_date'):
-        raise Exception('Отсутствует дата')
+    if not isinstance(response.get('current_date'), int):
+        raise TypeError('Ответ не содержит число current_date')
 
 
 def parse_status(homework: dict) -> str:
     """Парсим название и статус проекта из JSON."""
     if 'status' not in homework:
-        raise KeyError('Ключ status отсутствует в словаре')
+        raise TypeError('Ключ status отсутствует в словаре')
     if 'homework_name' not in homework:
-        raise KeyError('Ключ homework_name отсутствует в словаре')
+        raise TypeError('Ключ homework_name отсутствует в словаре')
     if homework['status'] not in HOMEWORK_VERDICTS:
-        raise KeyError('Значение ключа status не совпадает с шаблоном')
+        raise TypeError('Значение ключа status не совпадает с шаблоном')
     homework_name = homework['homework_name']
     verdict = HOMEWORK_VERDICTS[homework['status']]
     if not homework_name:
@@ -99,9 +102,10 @@ def send_message(bot, message):
     """Функция отправки сообщения о статусе проверки прокта."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logging.debug('Сообщение о статусе домашней работы отправлено')
     except Exception:
         logging.error('Отправка сообщеней в телеграмм бот недоступна')
+    else:
+        logging.debug('Сообщение о статусе домашней работы отправлено')
 
 
 def main():
@@ -114,7 +118,6 @@ def main():
         try:
             response = get_api_answer(timestamp)
             check_response(response)
-            print(response)
             if response['homeworks']:
                 new_message = parse_status(response['homeworks'][0])
                 if new_message != message_with_verdict:
@@ -125,8 +128,8 @@ def main():
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
+            send_message(bot, message)
             logging.error(message)
-            print(f'Сбой в работе программы: {error}')
         finally:
             time.sleep(RETRY_PERIOD)
 
