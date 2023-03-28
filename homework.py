@@ -48,7 +48,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-def check_tokens() -> bool:
+def check_tokens():
     """Проверяем наличия данных в переменных в окружении."""
     tokens = ['PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID']
     empty_tokens = [token for token in tokens if not globals().get(token)]
@@ -73,7 +73,7 @@ def get_api_answer(timestamp: int) -> str:
     return data
 
 
-def check_response(response: dict) -> bool:
+def check_response(response: dict):
     """Проверка наличия данных в JSON."""
     if not isinstance(response, dict):
         raise TypeError('Ответ не содержит словарь')
