@@ -53,7 +53,7 @@ def check_tokens():
     tokens = ['PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID']
     empty_tokens = [token for token in tokens if not globals().get(token)]
     if empty_tokens:
-        logging.critical('Отсутствуют переменные или токены {empty_tokens}')
+        logging.critical(f'Отсутствуют переменные или токены {empty_tokens}')
         sys.exit(1)
 
 
@@ -63,14 +63,13 @@ def get_api_answer(timestamp: int) -> str:
         response = requests.get(
             ENDPOINT, headers=HEADERS, params={'from_date': timestamp}
         )
-        data = response.json()
+        if response.status_code != HTTPStatus.OK:
+            raise APINotStatusCode200('Статус код НЕ 200 ОК')
+        return response.json()
     except requests.RequestException as error:
         raise APINotAvailableException(f'Эндпоинт не доступен. Ошибка {error}')
     except JSONDecodeError:
         raise JSONformatExceprion('Не корректный формат JSON')
-    if response.status_code != HTTPStatus.OK:
-        raise APINotStatusCode200('Статус код НЕ 200 ОК')
-    return data
 
 
 def check_response(response: dict):
@@ -80,21 +79,25 @@ def check_response(response: dict):
     if not isinstance(response.get('homeworks'), list):
         raise TypeError('Ответ не содержит списка homeworks')
     if not isinstance(response.get('current_date'), int):
-        raise TypeError('Ответ не содержит число current_date')
+        logging.error('Ответ не содержит число current_date')
+    if not response.get('homeworks'):
+        logging.error('Отсутствует значение ключа homeworks')
+    if not response.get('current_date'):
+        logging.error('Отсутствует значение ключа current_date')
 
 
 def parse_status(homework: dict) -> str:
     """Парсим название и статус проекта из JSON."""
     if 'status' not in homework:
-        raise TypeError('Ключ status отсутствует в словаре')
+        raise ValueError('Ключ status отсутствует в словаре')
     if 'homework_name' not in homework:
         raise TypeError('Ключ homework_name отсутствует в словаре')
     if homework['status'] not in HOMEWORK_VERDICTS:
-        raise TypeError('Значение ключа status не совпадает с шаблоном')
+        raise ValueError('Значение ключа status не совпадает с шаблоном')
     homework_name = homework['homework_name']
     verdict = HOMEWORK_VERDICTS[homework['status']]
     if not homework_name:
-        raise Exception('Отсутствует название домашней работы')
+        raise ValueError('Отсутствует название домашней работы')
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -102,7 +105,7 @@ def send_message(bot, message):
     """Функция отправки сообщения о статусе проверки прокта."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-    except Exception:
+    except telegram.error.TelegramError:
         logging.error('Отправка сообщеней в телеграмм бот недоступна')
     else:
         logging.debug('Сообщение о статусе домашней работы отправлено')
@@ -118,14 +121,14 @@ def main():
         try:
             response = get_api_answer(timestamp)
             check_response(response)
+            timestamp = response.get('current_date')
             if response['homeworks']:
                 new_message = parse_status(response['homeworks'][0])
                 if new_message != message_with_verdict:
                     message_with_verdict = new_message
                     send_message(bot, message_with_verdict)
-            else:
-                logging.debug('Новых сообщений нет')
-
+                else:
+                    logging.debug('Новых сообщений нет')
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             send_message(bot, message)
