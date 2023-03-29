@@ -78,26 +78,20 @@ def check_response(response: dict):
         raise TypeError('Ответ не содержит словарь')
     if not isinstance(response.get('homeworks'), list):
         raise TypeError('Ответ не содержит списка homeworks')
-    if not isinstance(response.get('current_date'), int):
-        logging.error('Ответ не содержит число current_date')
-    if not response.get('homeworks'):
-        logging.error('Отсутствует значение ключа homeworks')
-    if not response.get('current_date'):
-        logging.error('Отсутствует значение ключа current_date')
 
 
 def parse_status(homework: dict) -> str:
     """Парсим название и статус проекта из JSON."""
     if 'status' not in homework:
-        raise ValueError('Ключ status отсутствует в словаре')
+        raise KeyError('Ключ status отсутствует в словаре')
     if 'homework_name' not in homework:
-        raise TypeError('Ключ homework_name отсутствует в словаре')
+        raise KeyError('Ключ homework_name отсутствует в словаре')
+    if not homework['homework_name']:
+        raise ValueError('Отсутствует значение ключа homework_name')
     if homework['status'] not in HOMEWORK_VERDICTS:
         raise ValueError('Значение ключа status не совпадает с шаблоном')
     homework_name = homework['homework_name']
     verdict = HOMEWORK_VERDICTS[homework['status']]
-    if not homework_name:
-        raise ValueError('Отсутствует название домашней работы')
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -121,6 +115,12 @@ def main():
         try:
             response = get_api_answer(timestamp)
             check_response(response)
+            if not isinstance(response.get('current_date'), int):
+                logging.error('Ответ не содержит число current_date')
+            if not response.get('current_date'):
+                logging.error('Отсутствует значение ключа current_date')
+            if not response.get('homeworks'):
+                logging.error('Не допустимое значение ключа homeworks')
             timestamp = response.get('current_date')
             if response['homeworks']:
                 new_message = parse_status(response['homeworks'][0])
