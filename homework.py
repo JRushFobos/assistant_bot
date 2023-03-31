@@ -14,6 +14,9 @@ from exceptions import (
     JSONformatExceprion,
     APINotAvailableException,
     APINotStatusCode200,
+    CurrentDateError,
+    CurrentDateTypeError,
+    ExceptionWithOutMessage,
 )
 
 load_dotenv()
@@ -76,17 +79,19 @@ def check_response(response: dict):
     """Проверка наличия данных в JSON."""
     if not isinstance(response, dict):
         raise TypeError('Ответ не содержит словарь')
-    if 'homeworks' not in response:
-        raise TypeError('Отсутствует ключ homeworks')
+    if response.get('homeworks') is None:
+        raise KeyError('Ошибка ключа homeworks')
     if not isinstance(response['homeworks'], list):
         raise TypeError(
             'Значение для ключа homeworks не корретного типа, '
             'должен быть список'
         )
     if 'current_date' not in response:
-        logging.warning('Ключ current_date отсутствует')
+        raise CurrentDateError('Ошибка ключа current_date')
     elif not isinstance(response.get('current_date'), int):
-        logging.warning('current_date должно быть числом')
+        raise CurrentDateTypeError(
+            'Не верный тип значение current_date. Должно быть целое число'
+        )
 
 
 def parse_status(homework: dict) -> str:
@@ -95,8 +100,6 @@ def parse_status(homework: dict) -> str:
         raise KeyError('Ключ status отсутствует в словаре')
     if 'homework_name' not in homework:
         raise KeyError('Ключ homework_name отсутствует в словаре')
-    if not homework['homework_name']:
-        raise ValueError('Отсутствует значение ключа homework_name')
     if homework['status'] not in HOMEWORK_VERDICTS:
         raise ValueError('Значение ключа status не совпадает с шаблоном')
     homework_name = homework['homework_name']
@@ -133,6 +136,8 @@ def main():
                     send_message(bot, message_with_verdict)
                 else:
                     logging.debug('Новых сообщений нет')
+        except ExceptionWithOutMessage as error:
+            logging.error(f'Сбой в работе программы {error}')
         except Exception as error:
             new_message = f'Сбой в работе программы: {error}'
             if new_message != last_message:
